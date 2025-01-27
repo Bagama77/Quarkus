@@ -2,62 +2,46 @@ version: '3.9'
 
 services:
   cucumber-service:
-    depends_on:
-      - postgres
     build:
-      context: ./src/main/docker/
-      dockerfile: Dockerfile.legacy-jar
-    image: quarkus/cucumber-garden-quarkus-legacy-jar
+      context: .
+      dockerfile: src/main/docker/Dockerfile.jvm
+    image: quarkus/cucumber-garden-quarkus-jar
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       LANGUAGE: en_US:en
       JAVA_OPTS_APPEND: -Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager
       JAVA_APP_JAR: /deployments/quarkus-run.jar
-      QUARKUS_DATASOURCE_URL: jdbc:postgresql://localhost:5432/cucumber
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:5432/cucumber
       QUARKUS_DATASOURCE_USERNAME: admin
       QUARKUS_DATASOURCE_PASSWORD: admin
-    network_mode: host
-#    network_mode: bridge
-#    networks:
-#      - network1
-#    networks:
-#      - cucumber_network
     ports:
       - '8080:8080'
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    networks:
+      - cucumber_network
 
   postgres:
     image: postgres:14-alpine
     container_name: postgres
     restart: always
-#    networks:
-#      - network1
-#      - cucumber_network
-#    network_mode: host
-#    network_mode: bridge
-    ports:
-      - '5432:5432'
     volumes:
       - ./src/main/resources/sql-scripts/data.sql:/docker-entrypoint-initdb.d/1.sql
+    networks:
+      - cucumber_network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "admin"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    ports:
+      - '5433:5432' # This port mapping is only required for testing the database connection with PSQL from the host machine.
+                    # The application running inside the Docker network will still function properly without this mapping,
+                    # as it communicates with the database using the internal Docker network and the service name 'postgres'.
     environment:
       POSTGRES_PASSWORD: admin
       POSTGRES_USER: admin
       POSTGRES_DB: cucumber
-    extra_hosts:
-      - 'host.docker.internal:host-gateway'
 
-#networks:
-#  cucumber_network:
-#    external: true
-#    name: host
-
-#networks:
-#  network1:
-#    name: my-network
-#    attachable: true
-#    ipam:
-#      driver: default
-#      config:
-#        - subnet: 172.17.0.0/16
-#          ip_range: 172.17.5.0/24
-#          gateway: 172.17.1.1
+networks:
+  cucumber_network:
